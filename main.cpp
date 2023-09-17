@@ -82,7 +82,6 @@ private slots:
         QScrollBar* scrollBar = logText->verticalScrollBar();
         int scrollValue = scrollBar->value();
         logText->setPlainText(logContent);
-
         if (scrollToBottom) {
             scrollToBottomButton->setStyleSheet("background-color: lightblue;");
             scrollBar->setValue(scrollBar->maximum());
@@ -90,7 +89,9 @@ private slots:
             scrollToBottomButton->setStyleSheet("background-color: white;");
             scrollBar->setValue(scrollValue);
         }
+        logText->update();
     }
+
 
 
     void scrollToBottom() {
@@ -133,7 +134,7 @@ private:
     void setupFileWatcher() {
         QTimer *timer = new QTimer(this);
         connect(timer, SIGNAL(timeout()), this, SLOT(updateLog()));
-        timer->start(500);
+        timer->start(300);
     }
 
     QPushButton *selectFileButton;
