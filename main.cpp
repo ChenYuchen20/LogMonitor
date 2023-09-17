@@ -9,6 +9,51 @@
 #include <QPushButton>
 #include <QLineEdit>
 #include <QScrollBar>
+#include <QThread>
+
+class LogLoader : public QObject {
+    Q_OBJECT
+
+public:
+    LogLoader(QString filePath, QString filterText, QTextEdit* logText, bool isScrollToBottom) :
+        filePath(filePath), filterText(filterText), logText(logText), isScrollToBottom(isScrollToBottom) {}
+
+public slots:
+    void loadLog() {
+        QFile file(filePath);
+        if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            QTextStream in(&file);
+            QString logContent;
+            QList<QString> lastLines;
+            int lineCount = 100;
+
+            while (!in.atEnd()) {
+                QString line = in.readLine();
+                if (filterText.isEmpty() || line.contains(filterText, Qt::CaseInsensitive)) {
+                    lastLines.append(line);
+                    if (lastLines.size() > lineCount) {
+                        lastLines.pop_front();
+                    }
+                }
+            }
+            file.close();
+            for (const QString& line : lastLines) {
+                logContent.append(line + "\n");
+            }
+            emit logLoaded(logContent, isScrollToBottom);
+        }
+    }
+
+signals:
+    void logLoaded(const QString& logContent, bool isScrollToBottom);
+
+private:
+    QString filePath;
+    QString filterText;
+    QTextEdit* logText;
+    bool isScrollToBottom;
+};
+
 
 class LogViewer : public QWidget {
     Q_OBJECT
@@ -17,42 +62,36 @@ public:
     LogViewer(QWidget *parent = nullptr) : QWidget(parent) {
         setupUI();
         setupFileWatcher();
-        resize(800, 600);
+        resize(1280, 1000);
         setWindowTitle("LogMonitor");
     }
 
 private slots:
     void updateLog() {
         if (!currentFilePath.isEmpty()) {
-            QFile file(currentFilePath);
-            if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-                QTextStream in(&file);
-                QString filterText = filterLineEdit->text().trimmed();
-                QString logContent;
-
-                QScrollBar *scrollBar = logText->verticalScrollBar();
-                int scrollValue = scrollBar->value();
-
-                while (!in.atEnd()) {
-                    QString line = in.readLine();
-                    if (filterText.isEmpty() || line.contains(filterText, Qt::CaseInsensitive)) {
-                        logContent.append(line + "\n");
-                    }
-                }
-                logText->setPlainText(logContent);
-                file.close();
-
-                if(isScrollToBottom) {
-                    scrollToBottomButton->setStyleSheet("background-color: lightblue;");
-                    scrollBar->setValue(scrollBar->maximum());
-                }
-                else {
-                    scrollToBottomButton->setStyleSheet("background-color: white;");
-                    scrollBar->setValue(scrollValue);
-                }
-            }
+            LogLoader* loader = new LogLoader(currentFilePath, filterLineEdit->text().trimmed(), logText, isScrollToBottom);
+            connect(loader, SIGNAL(logLoaded(QString,bool)), this, SLOT(handleLogUpdate(QString,bool)));
+            QThread* thread = new QThread;
+            connect(thread, SIGNAL(started()), loader, SLOT(loadLog()));
+            loader->moveToThread(thread);
+            thread->start();
         }
     }
+
+    void handleLogUpdate(const QString& logContent, bool scrollToBottom) {
+        QScrollBar* scrollBar = logText->verticalScrollBar();
+        int scrollValue = scrollBar->value();
+        logText->setPlainText(logContent);
+
+        if (scrollToBottom) {
+            scrollToBottomButton->setStyleSheet("background-color: lightblue;");
+            scrollBar->setValue(scrollBar->maximum());
+        } else {
+            scrollToBottomButton->setStyleSheet("background-color: white;");
+            scrollBar->setValue(scrollValue);
+        }
+    }
+
 
     void scrollToBottom() {
         isScrollToBottom = !isScrollToBottom;
@@ -94,7 +133,7 @@ private:
     void setupFileWatcher() {
         QTimer *timer = new QTimer(this);
         connect(timer, SIGNAL(timeout()), this, SLOT(updateLog()));
-        timer->start(100);
+        timer->start(500);
     }
 
     QPushButton *selectFileButton;
