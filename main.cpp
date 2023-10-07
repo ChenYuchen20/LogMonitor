@@ -69,11 +69,15 @@ public:
 private slots:
     void updateLog() {
         if (!currentFilePath.isEmpty()) {
-            LogLoader* loader = new LogLoader(currentFilePath, filterLineEdit->text().trimmed(), logText, isScrollToBottom);
-            connect(loader, SIGNAL(logLoaded(QString,bool)), this, SLOT(handleLogUpdate(QString,bool)));
+            const QString filter = filterLineEdit->text().trimmed();
+
             QThread* thread = new QThread;
-            connect(thread, SIGNAL(started()), loader, SLOT(loadLog()));
+            LogLoader* loader = new LogLoader(currentFilePath, filter, logText, isScrollToBottom);
             loader->moveToThread(thread);
+
+            connect(thread, &QThread::started, loader, &LogLoader::loadLog);
+            connect(loader, &LogLoader::logLoaded, this, &LogViewer::handleLogUpdate);
+
             thread->start();
         }
     }
