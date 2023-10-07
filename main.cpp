@@ -90,9 +90,17 @@ private slots:
             scrollBar->setValue(scrollValue);
         }
         logText->update();
+
+        // 释放资源
+        QObject* senderObj = sender();
+        if (senderObj) {
+            QThread* thread = static_cast<LogLoader*>(senderObj)->thread();
+            senderObj->deleteLater();
+            thread->quit();
+            thread->wait();
+            thread->deleteLater();
+        }
     }
-
-
 
     void scrollToBottom() {
         isScrollToBottom = !isScrollToBottom;
@@ -103,6 +111,18 @@ private slots:
         if (!selectedFilePath.isEmpty()) {
             currentFilePath = selectedFilePath;
             updateLog();
+        }
+    }
+
+    void clearLog() {
+        if (!currentFilePath.isEmpty()) {
+            QFile file(currentFilePath);
+            if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+                QTextStream out(&file);
+                out << "";
+                file.close();
+                updateLog();
+            }
         }
     }
 
@@ -123,6 +143,11 @@ private:
         connect(selectFileButton, SIGNAL(clicked()), this, SLOT(chooseLogFile()));
         layout->addWidget(selectFileButton);
 
+        clearLogButton = new QPushButton(tr("清空文件内容"));
+        clearLogButton->setStyleSheet("background-color: white;");
+        connect(clearLogButton, SIGNAL(clicked()), this, SLOT(clearLog()));
+        layout->addWidget(clearLogButton);
+
         scrollToBottomButton = new QPushButton(tr("滚动到底部"));
         scrollToBottomButton->setStyleSheet("background-color: white;");
         connect(scrollToBottomButton, SIGNAL(clicked()), this, SLOT(scrollToBottom()));
@@ -139,6 +164,7 @@ private:
 
     QPushButton *selectFileButton;
     QPushButton *scrollToBottomButton;
+    QPushButton *clearLogButton;
     QTextEdit *logText;
     QLineEdit *filterLineEdit;
     QString currentFilePath;
